@@ -49,7 +49,7 @@ HEADERS = {
     "Referer": "https://servers.redm.net/",
 }
 
-BATCH_SIZE = 60       # requests per batch (well under the ~80 limit)
+BATCH_SIZE = 75       # requests per batch (close to ~80 limit, safe with separate IPs)
 BATCH_COOLDOWN = 300  # seconds (5 min) between batches
 
 
@@ -423,8 +423,6 @@ def main():
 
 def cmd_prepare(workers: int):
     """Fetch stream, filter RedM servers, split into chunks for parallel workers."""
-    print(f"Prepare: fetching stream and splitting into {workers} chunks...")
-
     raw = fetch_stream_with_retry()
     print(f"  Downloaded {len(raw):,} bytes")
 
@@ -433,6 +431,11 @@ def cmd_prepare(workers: int):
 
     redm_servers = [s for s in all_servers if s.get("gamename") == "rdr3"]
     print(f"  RedM servers: {len(redm_servers)}")
+
+    # Auto-calculate optimal workers: each gets ≤ BATCH_SIZE servers → 0 cooldowns
+    if workers == 0:
+        workers = max(1, math.ceil(len(redm_servers) / BATCH_SIZE))
+    print(f"  Workers: {workers} (≤{BATCH_SIZE} servers each, no cooldowns needed)")
 
     # Split into chunks
     chunk_size = math.ceil(len(redm_servers) / workers)
@@ -468,11 +471,11 @@ def cmd_fetch(chunk_file: str, output_file: str):
     with open(chunk_file, "r", encoding="utf-8") as f:
         servers = json.load(f)
 
-    print(f"Fetch: processing {len(servers)} servers from {chunk_file}")
+    print(f"Fetch: processing {len(servers)} servers from {chunk_file}", flush=True)
 
     server_details = {}
     total_batches = math.ceil(len(servers) / BATCH_SIZE)
-    print(f"  {total_batches} batches of {BATCH_SIZE} (cooldown {BATCH_COOLDOWN}s)")
+    print(f"  {total_batches} batches of {BATCH_SIZE} (cooldown {BATCH_COOLDOWN}s)", flush=True)
 
     batch_num = 0
     for batch_start in range(0, len(servers), BATCH_SIZE):
@@ -480,11 +483,11 @@ def cmd_fetch(chunk_file: str, output_file: str):
         batch_num += 1
 
         if batch_start > 0:
-            print(f"\n  Cooldown: waiting {BATCH_COOLDOWN}s before batch {batch_num}/{total_batches}...")
+            print(f"\n  Cooldown: waiting {BATCH_COOLDOWN}s before batch {batch_num}/{total_batches}...", flush=True)
             time.sleep(BATCH_COOLDOWN)
             wait_for_unblock()
 
-        print(f"\n  Batch {batch_num}/{total_batches}: fetching {len(batch)} servers...")
+        print(f"\n  Batch {batch_num}/{total_batches}: fetching {len(batch)} servers...", flush=True)
         batch_ok = 0
         batch_err = 0
         hit_rate_limit = False
@@ -496,19 +499,20 @@ def cmd_fetch(chunk_file: str, output_file: str):
             if reason == "rate_limit":
                 hit_rate_limit = True
                 batch_err += 1
-                print(f"\n  Rate limit hit at request {i+1} in batch — stopping batch early")
+                print(f"    [{i+1}/{len(batch)}] {ep} -> RATE LIMITED, stopping batch", flush=True)
                 break
 
             if detail:
                 server_details[ep] = detail
                 batch_ok += 1
+                status = "ok"
             else:
                 batch_err += 1
+                status = reason or "error"
 
-            if (i + 1) % 10 == 0:
-                print(f"    [{i+1}/{len(batch)}] ok={batch_ok} err={batch_err}", end="\r")
+            print(f"    [{i+1}/{len(batch)}] {ep} -> {status} (ok={batch_ok} err={batch_err})", flush=True)
 
-        print(f"    Batch {batch_num} done: ok={batch_ok} err={batch_err}" + (" (rate limited)" if hit_rate_limit else ""))
+        print(f"  Batch {batch_num} done: ok={batch_ok} err={batch_err}" + (" (rate limited)" if hit_rate_limit else ""), flush=True)
 
     # Save results
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -561,7 +565,7 @@ if __name__ == "__main__":
 
     # prepare
     p_prepare = subparsers.add_parser("prepare", help="Fetch stream and split into chunks")
-    p_prepare.add_argument("-w", "--workers", type=int, default=8, help="Number of worker chunks (default: 8)")
+    p_prepare.add_argument("-w", "--workers", type=int, default=0, help="Number of workers (0=auto, calculates optimal count)")
 
     # fetch
     p_fetch = subparsers.add_parser("fetch", help="Fetch server details for a chunk")

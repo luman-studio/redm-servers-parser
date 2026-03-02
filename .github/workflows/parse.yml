@@ -1,10 +1,7 @@
 name: Parse RedM Servers
 
 on:
-  schedule:
-    # Runs daily at 06:00 UTC
-    - cron: '0 6 * * *'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch: # Manual trigger only
 
 permissions:
   contents: write
@@ -14,6 +11,8 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.split.outputs.matrix }}
 
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +25,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Fetch stream and split into chunks
-        run: python parser.py prepare -w 8
+        id: split
+        run: |
+          python parser.py prepare
+          WORKERS=$(python -c "import json; print(json.load(open('data/chunks/stream_info.json'))['worker_count'])")
+          MATRIX=$(python -c "import json; print(json.dumps(list(range($WORKERS))))")
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Workers: $WORKERS, Matrix: $MATRIX"
 
       - name: Upload chunks
         uses: actions/upload-artifact@v4
@@ -39,10 +44,10 @@ jobs:
   fetch:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 30
     strategy:
       matrix:
-        worker: [0, 1, 2, 3, 4, 5, 6, 7]
+        worker: ${{ fromJson(needs.prepare.outputs.matrix) }}
       fail-fast: false
 
     steps:
@@ -62,15 +67,7 @@ jobs:
           path: data/chunks/
 
       - name: Fetch server details for chunk ${{ matrix.worker }}
-        run: |
-          CHUNK="data/chunks/chunk_${{ matrix.worker }}.json"
-          if [ -f "$CHUNK" ]; then
-            python parser.py fetch -c "$CHUNK" -o "data/results/result_${{ matrix.worker }}.json"
-          else
-            echo "Chunk file not found (fewer servers than workers), skipping."
-            mkdir -p data/results
-            echo "{}" > "data/results/result_${{ matrix.worker }}.json"
-          fi
+        run: python parser.py fetch -c "data/chunks/chunk_${{ matrix.worker }}.json" -o "data/results/result_${{ matrix.worker }}.json"
 
       - name: Upload results
         uses: actions/upload-artifact@v4
