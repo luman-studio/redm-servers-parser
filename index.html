@@ -52,7 +52,6 @@
       <div class="update-info">
         <div class="update-row">
           <span>Updated: <strong x-text="lastUpdateText"></strong></span>
-          <span>Next: <strong x-text="nextUpdateText"></strong></span>
         </div>
         <div class="progress-bar"><div class="progress-fill" :style="`width:${parsedPct}%`"></div></div>
         <div class="progress-label">
@@ -73,7 +72,7 @@
         <div>
           <div class="search-box">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" :value="query" @input="setQuery($event.target.value)"
+            <input type="text" :value="query" @input="debouncedSetQuery($event.target.value)"
               :placeholder="tab === 'servers' ? 'Search servers or resources...' : 'Search resources... (e.g. vorp, redemrp, inventory)'" autocomplete="off">
           </div>
           <div class="toolbar">

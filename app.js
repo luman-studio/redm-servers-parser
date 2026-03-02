@@ -56,6 +56,12 @@ document.addEventListener("alpine:init", () => {
     setTab(t) { this.tab = t; this.page = 0; this.syncUrl(); },
     setQuery(q) { this.query = q; this.page = 0; this.syncUrl(); },
 
+    _debounceTimer: null,
+    debouncedSetQuery(q) {
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = setTimeout(() => this.setQuery(q), 250);
+    },
+
     // ── Stats ──
     get totalServers() { return this.raw?.total_servers || 0; },
     get parsedServers() { return this.raw?.total_servers_with_resources || 0; },
@@ -64,11 +70,6 @@ document.addEventListener("alpine:init", () => {
     get parsedPct() { return this.totalServers > 0 ? Math.round(this.parsedServers / this.totalServers * 100) : 0; },
 
     get lastUpdateText() { return this.parsedAt ? relativeTime(this.parsedAt) : "—"; },
-    get nextUpdateText() {
-      if (!this.parsedAt) return "—";
-      const next = nextCronRun(this.parsedAt);
-      return next > new Date() ? relativeTime(next, true) : "soon";
-    },
 
     // ── Filtered + sorted resources ──
     get filtered() {
@@ -218,13 +219,6 @@ document.addEventListener("alpine:init", () => {
 });
 
 // ── Utility functions ──
-
-function nextCronRun(after) {
-  const d = new Date(after);
-  d.setUTCHours(6, 0, 0, 0);
-  if (d <= after) d.setUTCDate(d.getUTCDate() + 1);
-  return d;
-}
 
 function relativeTime(date, future = false) {
   const now = new Date();
