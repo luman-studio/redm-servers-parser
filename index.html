@@ -73,6 +73,56 @@
     margin-top: 2px;
   }
 
+  .update-info {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin-bottom: 24px;
+    display: none;
+  }
+
+  .update-info .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .update-info .progress-wrap {
+    margin-top: 10px;
+  }
+
+  .update-info .progress-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .update-info .progress-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 3px;
+    transition: width 0.3s;
+  }
+
+  .update-info .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .update-info .next-run {
+    color: var(--text);
+    font-weight: 500;
+  }
+
   .search-box {
     position: relative;
     margin-bottom: 20px;
@@ -315,6 +365,20 @@
     </div>
   </div>
 
+  <div id="update-info" class="update-info">
+    <div class="row">
+      <span>Last update: <strong id="upd-last">—</strong></span>
+      <span>Next update: <span class="next-run" id="upd-next">—</span></span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="upd-bar"></div></div>
+      <div class="progress-label">
+        <span id="upd-progress-text"></span>
+        <span id="upd-pct"></span>
+      </div>
+    </div>
+  </div>
+
   <div class="search-box">
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
     <input type="text" id="search" placeholder="Search resources... (e.g. vorp, redemrp, inventory)" autocomplete="off">
@@ -367,6 +431,9 @@ async function init() {
       day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
     });
     document.getElementById("stats-bar").style.display = "flex";
+
+    // Update info panel: progress + next run
+    showUpdateInfo(data);
 
     allResources = Object.entries(data.resources).map(([name, info]) => ({
       name,
@@ -489,6 +556,56 @@ function showDetail(name) {
 
 function closeDetail() {
   document.getElementById("detail-overlay").classList.remove("open");
+}
+
+function showUpdateInfo(data) {
+  const panel = document.getElementById("update-info");
+  const parsedAt = new Date(data.parsed_at);
+  const total = data.total_servers || 0;
+  const parsed = data.total_servers_with_resources || 0;
+  const pct = total > 0 ? Math.round(parsed / total * 100) : 0;
+
+  // Last update — relative time
+  const ago = relativeTime(parsedAt);
+  document.getElementById("upd-last").textContent = ago;
+
+  // Next run — next 06:00 UTC after parsed_at
+  const next = nextCronRun(parsedAt);
+  const now = new Date();
+  if (next > now) {
+    document.getElementById("upd-next").textContent = relativeTime(next, true);
+  } else {
+    document.getElementById("upd-next").textContent = "soon (scheduled)";
+  }
+
+  // Progress bar
+  document.getElementById("upd-bar").style.width = pct + "%";
+  document.getElementById("upd-progress-text").textContent =
+    `Parsed ${parsed} of ${total} servers`;
+  document.getElementById("upd-pct").textContent = pct + "%";
+
+  panel.style.display = "block";
+}
+
+function nextCronRun(after) {
+  // Cron: 0 6 * * * (daily at 06:00 UTC)
+  const d = new Date(after);
+  d.setUTCHours(6, 0, 0, 0);
+  if (d <= after) d.setUTCDate(d.getUTCDate() + 1);
+  return d;
+}
+
+function relativeTime(date, future) {
+  const now = new Date();
+  const diff = future ? date - now : now - date;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return future ? "less than a minute" : "just now";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} min${min > 1 ? "" : ""} ${future ? "from now" : "ago"}`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h ${min % 60}m ${future ? "from now" : "ago"}`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h ${future ? "from now" : "ago"}`;
 }
 
 function esc(s) {
