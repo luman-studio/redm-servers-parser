@@ -12,9 +12,18 @@ Rate limits (Akamai CDN):
   - ~80 requests before 403 block
   - Block lasts ~5-10 minutes
   - Strategy: batches of 60 + 5 min cooldown between batches
+
+Multi-worker mode (for GitHub Actions):
+  python parser.py prepare -w 8       # split into 8 chunks
+  python parser.py fetch -c chunk.json -o result.json  # fetch one chunk
+  python parser.py merge              # merge all results
+  python parser.py                    # original single-process mode
 """
 
+import argparse
+import glob as glob_mod
 import json
+import math
 import os
 import re
 import struct
@@ -28,6 +37,8 @@ SINGLE_URL = "https://servers-frontend.fivem.net/api/servers/single/{}"
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "resources.json")
 PROGRESS_FILE = os.path.join(OUTPUT_DIR, "progress.json")
+CHUNKS_DIR = os.path.join(OUTPUT_DIR, "chunks")
+RESULTS_DIR = os.path.join(OUTPUT_DIR, "results")
 
 COLOR_CODE_RE = re.compile(r"\^[0-9]")
 
@@ -253,12 +264,17 @@ def fetch_stream_with_retry(max_retries=5) -> bytes:
 def aggregate_and_save(redm_servers: list[dict], server_details: dict):
     """Aggregate resource stats from fetched server details and save output."""
     resources = {}
+    servers_list = []
     total_with_resources = 0
 
     for endpoint, detail in server_details.items():
         data = detail.get("Data", {})
         res_list = data.get("resources", [])
         if not res_list:
+            continue
+
+        clean_resources = [r.strip() for r in res_list if isinstance(r, str) and r.strip()]
+        if not clean_resources:
             continue
 
         total_with_resources += 1
@@ -273,10 +289,10 @@ def aggregate_and_save(redm_servers: list[dict], server_details: dict):
             "max_players": max_clients,
         }
 
-        for res_name in res_list:
-            if not isinstance(res_name, str) or not res_name.strip():
-                continue
-            res_name = res_name.strip()
+        # Add to servers list (with resource names)
+        servers_list.append({**server_entry, "resources": clean_resources})
+
+        for res_name in clean_resources:
             if res_name not in resources:
                 resources[res_name] = {"count": 0, "servers": []}
             resources[res_name]["count"] += 1
@@ -285,12 +301,15 @@ def aggregate_and_save(redm_servers: list[dict], server_details: dict):
     for res in resources.values():
         res["servers"].sort(key=lambda s: s["players"], reverse=True)
 
+    servers_list.sort(key=lambda s: s["players"], reverse=True)
+
     result = {
         "parsed_at": datetime.now(timezone.utc).isoformat(),
         "total_servers": len(redm_servers),
         "total_servers_with_resources": total_with_resources,
         "total_resources": len(resources),
         "resources": resources,
+        "servers": servers_list,
     }
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -399,5 +418,166 @@ def main():
         print(f"  {i:>2}. {name} — {info['count']} servers")
 
 
+# ─── Multi-worker subcommands ─────────────────────────────────────────
+
+
+def cmd_prepare(workers: int):
+    """Fetch stream, filter RedM servers, split into chunks for parallel workers."""
+    print(f"Prepare: fetching stream and splitting into {workers} chunks...")
+
+    raw = fetch_stream_with_retry()
+    print(f"  Downloaded {len(raw):,} bytes")
+
+    all_servers = read_frames(raw)
+    print(f"  Total servers in stream: {len(all_servers)}")
+
+    redm_servers = [s for s in all_servers if s.get("gamename") == "rdr3"]
+    print(f"  RedM servers: {len(redm_servers)}")
+
+    # Split into chunks
+    chunk_size = math.ceil(len(redm_servers) / workers)
+    os.makedirs(CHUNKS_DIR, exist_ok=True)
+
+    actual_chunks = 0
+    for i in range(workers):
+        chunk = redm_servers[i * chunk_size : (i + 1) * chunk_size]
+        if not chunk:
+            break
+        chunk_file = os.path.join(CHUNKS_DIR, f"chunk_{i}.json")
+        with open(chunk_file, "w", encoding="utf-8") as f:
+            json.dump(chunk, f, ensure_ascii=False)
+        print(f"  Chunk {i}: {len(chunk)} servers -> {chunk_file}")
+        actual_chunks += 1
+
+    # Save stream info for merge phase
+    stream_info = {
+        "total_servers": len(all_servers),
+        "redm_servers": [{"endpoint": s["endpoint"]} for s in redm_servers],
+        "worker_count": actual_chunks,
+    }
+    info_file = os.path.join(CHUNKS_DIR, "stream_info.json")
+    with open(info_file, "w", encoding="utf-8") as f:
+        json.dump(stream_info, f, ensure_ascii=False)
+
+    print(f"\nDone! {actual_chunks} chunks ready in {CHUNKS_DIR}")
+    print(f"  Servers per chunk: ~{chunk_size}")
+
+
+def cmd_fetch(chunk_file: str, output_file: str):
+    """Fetch server details for a single chunk."""
+    with open(chunk_file, "r", encoding="utf-8") as f:
+        servers = json.load(f)
+
+    print(f"Fetch: processing {len(servers)} servers from {chunk_file}")
+
+    server_details = {}
+    total_batches = math.ceil(len(servers) / BATCH_SIZE)
+    print(f"  {total_batches} batches of {BATCH_SIZE} (cooldown {BATCH_COOLDOWN}s)")
+
+    batch_num = 0
+    for batch_start in range(0, len(servers), BATCH_SIZE):
+        batch = servers[batch_start : batch_start + BATCH_SIZE]
+        batch_num += 1
+
+        if batch_start > 0:
+            print(f"\n  Cooldown: waiting {BATCH_COOLDOWN}s before batch {batch_num}/{total_batches}...")
+            time.sleep(BATCH_COOLDOWN)
+            wait_for_unblock()
+
+        print(f"\n  Batch {batch_num}/{total_batches}: fetching {len(batch)} servers...")
+        batch_ok = 0
+        batch_err = 0
+        hit_rate_limit = False
+
+        for i, srv in enumerate(batch):
+            ep = srv["endpoint"]
+            detail, reason = fetch_single_server(ep)
+
+            if reason == "rate_limit":
+                hit_rate_limit = True
+                batch_err += 1
+                print(f"\n  Rate limit hit at request {i+1} in batch — stopping batch early")
+                break
+
+            if detail:
+                server_details[ep] = detail
+                batch_ok += 1
+            else:
+                batch_err += 1
+
+            if (i + 1) % 10 == 0:
+                print(f"    [{i+1}/{len(batch)}] ok={batch_ok} err={batch_err}", end="\r")
+
+        print(f"    Batch {batch_num} done: ok={batch_ok} err={batch_err}" + (" (rate limited)" if hit_rate_limit else ""))
+
+    # Save results
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(server_details, f, ensure_ascii=False)
+
+    print(f"\nDone! {len(server_details)} server details saved to {output_file}")
+
+
+def cmd_merge():
+    """Merge all worker results and produce final resources.json."""
+    # Load stream info
+    info_file = os.path.join(CHUNKS_DIR, "stream_info.json")
+    with open(info_file, "r", encoding="utf-8") as f:
+        stream_info = json.load(f)
+
+    redm_servers = stream_info["redm_servers"]
+    print(f"Merge: {len(redm_servers)} RedM servers from stream info")
+
+    # Load all result files
+    result_files = sorted(glob_mod.glob(os.path.join(RESULTS_DIR, "result_*.json")))
+    if not result_files:
+        print("Error: no result files found in", RESULTS_DIR)
+        return
+
+    server_details = {}
+    for rf in result_files:
+        with open(rf, "r", encoding="utf-8") as f:
+            chunk_details = json.load(f)
+        print(f"  {rf}: {len(chunk_details)} servers")
+        server_details.update(chunk_details)
+
+    print(f"  Total: {len(server_details)} server details from {len(result_files)} workers")
+
+    # Aggregate and save
+    total_with, total_res = aggregate_and_save(redm_servers, server_details)
+
+    print(f"\n{'='*50}")
+    print(f"Done!")
+    print(f"  RedM servers: {len(redm_servers)}")
+    print(f"  Servers fetched: {len(server_details)}")
+    print(f"  Servers with resources: {total_with}")
+    print(f"  Unique resources: {total_res}")
+    print(f"  Saved to {OUTPUT_FILE}")
+
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="RedM Server List Parser")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # prepare
+    p_prepare = subparsers.add_parser("prepare", help="Fetch stream and split into chunks")
+    p_prepare.add_argument("-w", "--workers", type=int, default=8, help="Number of worker chunks (default: 8)")
+
+    # fetch
+    p_fetch = subparsers.add_parser("fetch", help="Fetch server details for a chunk")
+    p_fetch.add_argument("-c", "--chunk", required=True, help="Path to chunk JSON file")
+    p_fetch.add_argument("-o", "--output", required=True, help="Path to save results JSON")
+
+    # merge
+    subparsers.add_parser("merge", help="Merge worker results into final output")
+
+    args = parser.parse_args()
+
+    if args.command == "prepare":
+        cmd_prepare(args.workers)
+    elif args.command == "fetch":
+        cmd_fetch(args.chunk, args.output)
+    elif args.command == "merge":
+        cmd_merge()
+    else:
+        main()

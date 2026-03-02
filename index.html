@@ -4,629 +4,276 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RedM Resource Stats</title>
-<style>
-  :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --border: #2a2d3a;
-    --text: #e4e4e7;
-    --text-dim: #8b8d97;
-    --accent: #c5382a;
-    --accent-hover: #d94a3c;
-    --green: #4ade80;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
-
-  .container {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 24px 16px;
-  }
-
-  header {
-    text-align: center;
-    margin-bottom: 32px;
-  }
-
-  header h1 {
-    font-size: 28px;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-
-  header h1 span { color: var(--accent); }
-
-  .stats-bar {
-    display: flex;
-    gap: 24px;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 24px;
-  }
-
-  .stat-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 20px;
-    text-align: center;
-    min-width: 160px;
-  }
-
-  .stat-item .value {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--accent);
-  }
-
-  .stat-item .label {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-top: 2px;
-  }
-
-  .update-info {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 20px;
-    margin-bottom: 24px;
-    display: none;
-  }
-
-  .update-info .row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-dim);
-  }
-
-  .update-info .progress-wrap {
-    margin-top: 10px;
-  }
-
-  .update-info .progress-bar {
-    height: 6px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .update-info .progress-fill {
-    height: 100%;
-    background: var(--green);
-    border-radius: 3px;
-    transition: width 0.3s;
-  }
-
-  .update-info .progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-
-  .update-info .next-run {
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .search-box {
-    position: relative;
-    margin-bottom: 20px;
-  }
-
-  .search-box input {
-    width: 100%;
-    padding: 12px 16px 12px 44px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 15px;
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .search-box input:focus { border-color: var(--accent); }
-
-  .search-box input::placeholder { color: var(--text-dim); }
-
-  .search-box svg {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-dim);
-  }
-
-  .results-info {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-bottom: 8px;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-
-  thead th {
-    background: #15171f;
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-  }
-
-  thead th:hover { color: var(--text); }
-  thead th.sorted { color: var(--accent); }
-
-  thead th .sort-arrow {
-    display: inline-block;
-    margin-left: 4px;
-    font-size: 10px;
-  }
-
-  tbody tr {
-    border-top: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  tbody tr:hover { background: #1f2230; }
-
-  tbody td {
-    padding: 10px 14px;
-    font-size: 14px;
-  }
-
-  td.res-name {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-weight: 500;
-  }
-
-  td.res-count {
-    font-weight: 700;
-    color: var(--green);
-    text-align: right;
-    width: 120px;
-  }
-
-  /* Detail panel */
-  .detail-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 100;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 40px 16px;
-    overflow-y: auto;
-  }
-
-  .detail-overlay.open { display: flex; }
-
-  .detail-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    max-width: 800px;
-    width: 100%;
-    padding: 24px;
-    position: relative;
-  }
-
-  .detail-panel h2 {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 20px;
-    margin-bottom: 4px;
-    word-break: break-all;
-  }
-
-  .detail-panel .sub {
-    color: var(--text-dim);
-    font-size: 14px;
-    margin-bottom: 16px;
-  }
-
-  .detail-panel .close-btn {
-    position: absolute;
-    right: 16px;
-    top: 16px;
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    font-size: 24px;
-    cursor: pointer;
-    line-height: 1;
-  }
-
-  .detail-panel .close-btn:hover { color: var(--text); }
-
-  .server-list {
-    max-height: 60vh;
-    overflow-y: auto;
-  }
-
-  .server-list table { font-size: 13px; }
-
-  .server-list th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-  }
-
-  .server-link {
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  .server-link:hover { text-decoration: underline; }
-
-  .loading {
-    text-align: center;
-    padding: 80px 20px;
-    color: var(--text-dim);
-    font-size: 16px;
-  }
-
-  .loading .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin: 0 auto 16px;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .error {
-    text-align: center;
-    padding: 40px;
-    color: #f87171;
-  }
-
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    margin-top: 16px;
-  }
-
-  .pagination button {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    padding: 6px 14px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  .pagination button:hover { border-color: var(--accent); }
-  .pagination button:disabled { opacity: 0.4; cursor: default; }
-
-  .pagination span {
-    font-size: 13px;
-    color: var(--text-dim);
-  }
-</style>
+<link rel="stylesheet" href="styles.css">
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+<script src="app.js"></script>
 </head>
 <body>
 
-<div class="container">
-  <header>
-    <h1><span>RedM</span> Resource Stats</h1>
-  </header>
+<div class="container" x-data="app">
 
-  <div id="stats-bar" class="stats-bar" style="display:none">
-    <div class="stat-item">
-      <div class="value" id="stat-servers">—</div>
-      <div class="label">RedM Servers (total)</div>
-    </div>
-    <div class="stat-item">
-      <div class="value" id="stat-parsed">—</div>
-      <div class="label">Servers Parsed</div>
-    </div>
-    <div class="stat-item">
-      <div class="value" id="stat-resources">—</div>
-      <div class="label">Unique Resources</div>
-    </div>
-    <div class="stat-item">
-      <div class="value" id="stat-date">—</div>
-      <div class="label">Last Parsed</div>
-    </div>
-  </div>
+  <!-- Loading -->
+  <template x-if="loading">
+    <div class="loading"><div class="spinner"></div>Loading data...</div>
+  </template>
 
-  <div id="update-info" class="update-info">
-    <div class="row">
-      <span>Last update: <strong id="upd-last">—</strong></span>
-      <span>Next update: <span class="next-run" id="upd-next">—</span></span>
+  <!-- Error -->
+  <template x-if="!loading && error">
+    <div class="error">
+      Failed to load data: <span x-text="error"></span><br><br>
+      Run <code>python parser.py</code> first.
     </div>
-    <div class="progress-wrap">
-      <div class="progress-bar"><div class="progress-fill" id="upd-bar"></div></div>
-      <div class="progress-label">
-        <span id="upd-progress-text"></span>
-        <span id="upd-pct"></span>
+  </template>
+
+  <!-- Main content -->
+  <template x-if="!loading && !error">
+    <div>
+
+      <!-- Header -->
+      <header><h1><span>RedM</span> Resource Stats</h1></header>
+
+      <!-- Stats -->
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="value" x-text="fmt(totalServers)"></div>
+          <div class="label">RedM Servers</div>
+        </div>
+        <div class="stat-item">
+          <div class="value" x-text="fmt(parsedServers)"></div>
+          <div class="label">Parsed</div>
+        </div>
+        <div class="stat-item">
+          <div class="value" x-text="fmt(totalResources)"></div>
+          <div class="label">Resources</div>
+        </div>
       </div>
+
+      <!-- Update info -->
+      <div class="update-info">
+        <div class="update-row">
+          <span>Updated: <strong x-text="lastUpdateText"></strong></span>
+          <span>Next: <strong x-text="nextUpdateText"></strong></span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" :style="`width:${parsedPct}%`"></div></div>
+        <div class="progress-label">
+          <span x-text="`${fmt(parsedServers)} / ${fmt(totalServers)} servers`"></span>
+          <span x-text="parsedPct + '%'"></span>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn" :class="{ active: tab==='resources' }" @click="setTab('resources')">Resources</button>
+        <button class="tab-btn" :class="{ active: tab==='servers' }" @click="setTab('servers')">Servers</button>
+        <button class="tab-btn" :class="{ active: tab==='analytics' }" @click="setTab('analytics')">Analytics</button>
+      </div>
+
+      <!-- Search + toolbar (resources & servers tabs) -->
+      <template x-if="tab !== 'analytics'">
+        <div>
+          <div class="search-box">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" :value="query" @input="setQuery($event.target.value)"
+              :placeholder="tab === 'servers' ? 'Search servers or resources...' : 'Search resources... (e.g. vorp, redemrp, inventory)'" autocomplete="off">
+          </div>
+          <div class="toolbar">
+            <span class="results-info" x-text="tab === 'servers'
+              ? `${fmt(filteredServers.length)} servers`
+              : `${fmt(filtered.length)} resources`
+            "></span>
+            <button class="btn-small" @click="exportCsv">Export CSV</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════ RESOURCES TAB ═══════════ -->
+      <template x-if="tab === 'resources'">
+        <div>
+          <table>
+            <thead><tr>
+              <th style="width:50px">#</th>
+              <th :class="{ sorted: isSorted('name') }" @click="toggleSort('name')">
+                Resource<span x-text="sortArrow('name')"></span>
+              </th>
+              <th :class="{ sorted: isSorted('count') }" @click="toggleSort('count')" style="text-align:right;width:100px">
+                Servers<span x-text="sortArrow('count')"></span>
+              </th>
+            </tr></thead>
+            <tbody>
+              <template x-for="(r, i) in pageItems" :key="r.name">
+                <tr @click="openResource(r.name)">
+                  <td class="dim" x-text="page * 50 + i + 1"></td>
+                  <td class="mono" x-text="r.name"></td>
+                  <td class="count" x-text="r.count"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+
+          <!-- Pagination -->
+          <div class="pagination" x-show="totalPages > 1">
+            <button @click="prevPage" :disabled="page === 0">&larr;</button>
+            <span x-text="`${page + 1} / ${totalPages}`"></span>
+            <button @click="nextPage" :disabled="page >= totalPages - 1">&rarr;</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════ SERVERS TAB ═══════════ -->
+      <template x-if="tab === 'servers'">
+        <div>
+          <table>
+            <thead><tr>
+              <th style="width:50px">#</th>
+              <th>Server</th>
+              <th style="text-align:right;width:90px">Players</th>
+              <th style="text-align:right;width:100px">Resources</th>
+            </tr></thead>
+            <tbody>
+              <template x-for="(s, i) in pageItems" :key="s.id">
+                <tr @click="openServer(s)">
+                  <td class="dim" x-text="page * 50 + i + 1"></td>
+                  <td x-text="s.name"></td>
+                  <td style="text-align:right" x-text="`${s.players} / ${s.max_players}`"></td>
+                  <td class="count" x-text="s.resources.length"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+
+          <div class="pagination" x-show="totalPages > 1">
+            <button @click="prevPage" :disabled="page === 0">&larr;</button>
+            <span x-text="`${page + 1} / ${totalPages}`"></span>
+            <button @click="nextPage" :disabled="page >= totalPages - 1">&rarr;</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════ ANALYTICS TAB ═══════════ -->
+      <template x-if="tab === 'analytics'">
+        <div>
+
+          <!-- Top resources bar chart -->
+          <div class="chart-section">
+            <div class="chart-title">Top 15 Resources</div>
+            <template x-for="r in topResources" :key="r.name">
+              <div class="bar-row">
+                <div class="bar-name" x-text="r.name" @click="openResource(r.name)" style="cursor:pointer"></div>
+                <div class="bar-track">
+                  <div class="bar-fill" :style="`width:${Math.round(r.count / maxCount * 100)}%`"></div>
+                </div>
+                <div class="bar-val" x-text="r.count"></div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Distribution histogram -->
+          <div class="chart-section">
+            <div class="chart-title">Popularity Distribution (servers using resource)</div>
+            <div class="histo-row">
+              <template x-for="b in histogram" :key="b.label">
+                <div class="histo-col">
+                  <div class="histo-count" x-text="b.count"></div>
+                  <div class="histo-bar" :style="`height:${Math.max(b.pct, 2)}%`"></div>
+                  <div class="histo-label" x-text="b.label"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- Categories -->
+          <div class="chart-section">
+            <div class="chart-title">Resource Categories (by prefix)</div>
+            <div class="tag-cloud">
+              <template x-for="c in categories" :key="c.name">
+                <span class="tag" @click="filterByCategory(c.name)">
+                  <span x-text="c.name + '_*'"></span>
+                  <span class="tag-count" x-text="c.resources"></span>
+                </span>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </template>
+
+      <!-- ═══════════ RESOURCE DETAIL OVERLAY ═══════════ -->
+      <template x-if="detail">
+        <div class="overlay" @click.self="closeDetail" @keydown.escape.window="closeDetail">
+          <div class="panel">
+            <button class="close-btn" @click="closeDetail">&times;</button>
+            <h2 x-text="detail.name"></h2>
+            <div class="sub" x-text="`Used by ${detail.count} server${detail.count !== 1 ? 's' : ''}`"></div>
+
+            <!-- Frequently together -->
+            <template x-if="detail.correlated.length > 0">
+              <div style="margin-bottom:14px">
+                <div style="font-size:13px;font-weight:600;margin-bottom:6px;color:var(--text-dim)">Frequently together:</div>
+                <div class="corr-list">
+                  <template x-for="c in detail.correlated" :key="c.name">
+                    <span class="corr-item" @click="closeDetail(); $nextTick(() => openResource(c.name))">
+                      <span x-text="c.name"></span>
+                      <span class="corr-pct" x-text="c.pct + '%'"></span>
+                    </span>
+                  </template>
+                </div>
+              </div>
+            </template>
+
+            <!-- Server list -->
+            <div class="scroll-list">
+              <table>
+                <thead><tr>
+                  <th>Server</th>
+                  <th style="text-align:right;width:100px">Players</th>
+                </tr></thead>
+                <tbody>
+                  <template x-for="s in detail.servers" :key="s.id">
+                    <tr>
+                      <td><a class="link" :href="serverLink(s.id)" target="_blank" rel="noopener" x-text="s.name"></a></td>
+                      <td style="text-align:right" x-text="`${s.players} / ${s.max_players}`"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════ SERVER DETAIL OVERLAY ═══════════ -->
+      <template x-if="serverDetail">
+        <div class="overlay" @click.self="closeServerDetail" @keydown.escape.window="closeServerDetail">
+          <div class="panel">
+            <button class="close-btn" @click="closeServerDetail">&times;</button>
+            <h2 x-text="serverDetail.name"></h2>
+            <div class="sub">
+              <span x-text="`${serverDetail.players} / ${serverDetail.max_players} players`"></span>
+              &mdash;
+              <a class="link" :href="serverLink(serverDetail.id)" target="_blank" rel="noopener">View on RedM</a>
+              &mdash;
+              <span x-text="`${serverDetail.resources.length} resources`"></span>
+            </div>
+            <div class="scroll-list">
+              <table>
+                <thead><tr><th>Resource</th></tr></thead>
+                <tbody>
+                  <template x-for="r in serverDetail.resources" :key="r">
+                    <tr style="cursor:pointer" @click="closeServerDetail(); $nextTick(() => openResource(r))">
+                      <td class="mono" x-text="r"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </template>
+
     </div>
-  </div>
+  </template>
 
-  <div class="search-box">
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input type="text" id="search" placeholder="Search resources... (e.g. vorp, redemrp, inventory)" autocomplete="off">
-  </div>
-
-  <div id="results-info" class="results-info"></div>
-
-  <div id="content">
-    <div class="loading">
-      <div class="spinner"></div>
-      Loading resource data...
-    </div>
-  </div>
-
-  <div id="pagination" class="pagination" style="display:none">
-    <button id="prev-btn">&larr; Prev</button>
-    <span id="page-info"></span>
-    <button id="next-btn">Next &rarr;</button>
-  </div>
 </div>
 
-<!-- Detail overlay -->
-<div class="detail-overlay" id="detail-overlay">
-  <div class="detail-panel">
-    <button class="close-btn" id="detail-close">&times;</button>
-    <h2 id="detail-name"></h2>
-    <div class="sub" id="detail-sub"></div>
-    <div class="server-list" id="detail-servers"></div>
-  </div>
-</div>
-
-<script>
-const PAGE_SIZE = 50;
-let allResources = [];    // [{name, count, servers}]
-let filtered = [];
-let currentPage = 0;
-let sortField = "count";  // "name" | "count"
-let sortAsc = false;
-
-async function init() {
-  try {
-    const resp = await fetch("data/resources.json");
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} — run parser.py first`);
-    const data = await resp.json();
-
-    document.getElementById("stat-servers").textContent = data.total_servers.toLocaleString();
-    document.getElementById("stat-parsed").textContent = (data.total_servers_with_resources || data.total_servers).toLocaleString();
-    document.getElementById("stat-resources").textContent = data.total_resources.toLocaleString();
-    document.getElementById("stat-date").textContent = new Date(data.parsed_at).toLocaleDateString("ru-RU", {
-      day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
-    });
-    document.getElementById("stats-bar").style.display = "flex";
-
-    // Update info panel: progress + next run
-    showUpdateInfo(data);
-
-    allResources = Object.entries(data.resources).map(([name, info]) => ({
-      name,
-      count: info.count,
-      servers: info.servers
-    }));
-
-    applySort();
-    filtered = allResources;
-    render();
-  } catch (err) {
-    document.getElementById("content").innerHTML =
-      `<div class="error">Failed to load data: ${err.message}<br><br>Run <code>python parser.py</code> first to generate the data.</div>`;
-  }
-}
-
-function applySort() {
-  const dir = sortAsc ? 1 : -1;
-  allResources.sort((a, b) => {
-    if (sortField === "count") return (a.count - b.count) * dir;
-    return a.name.localeCompare(b.name) * dir;
-  });
-}
-
-function doSearch() {
-  const q = document.getElementById("search").value.trim().toLowerCase();
-  filtered = q
-    ? allResources.filter(r => r.name.toLowerCase().includes(q))
-    : allResources;
-  currentPage = 0;
-  render();
-}
-
-function render() {
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  currentPage = Math.min(currentPage, totalPages - 1);
-  const start = currentPage * PAGE_SIZE;
-  const page = filtered.slice(start, start + PAGE_SIZE);
-
-  // Results info
-  const q = document.getElementById("search").value.trim();
-  document.getElementById("results-info").textContent = q
-    ? `Found ${filtered.length} resources matching "${q}"`
-    : `Showing ${filtered.length} resources`;
-
-  // Table
-  const arrow = (field) => sortField === field ? (sortAsc ? " \u25B2" : " \u25BC") : "";
-  const cls = (field) => sortField === field ? "sorted" : "";
-
-  let html = `<table>
-    <thead><tr>
-      <th class="${cls("name")}" onclick="toggleSort('name')">#<span class="sort-arrow"></span></th>
-      <th class="${cls("name")}" onclick="toggleSort('name')">Resource${arrow("name")}</th>
-      <th class="${cls("count")}" onclick="toggleSort('count')" style="text-align:right">Servers${arrow("count")}</th>
-    </tr></thead><tbody>`;
-
-  page.forEach((r, i) => {
-    html += `<tr onclick="showDetail('${r.name.replace(/'/g, "\\'")}')">
-      <td style="color:var(--text-dim);width:50px">${start + i + 1}</td>
-      <td class="res-name">${esc(r.name)}</td>
-      <td class="res-count">${r.count}</td>
-    </tr>`;
-  });
-
-  html += "</tbody></table>";
-  document.getElementById("content").innerHTML = html;
-
-  // Pagination
-  const pag = document.getElementById("pagination");
-  if (totalPages > 1) {
-    pag.style.display = "flex";
-    document.getElementById("page-info").textContent = `${currentPage + 1} / ${totalPages}`;
-    document.getElementById("prev-btn").disabled = currentPage === 0;
-    document.getElementById("next-btn").disabled = currentPage >= totalPages - 1;
-  } else {
-    pag.style.display = "none";
-  }
-}
-
-function toggleSort(field) {
-  if (sortField === field) {
-    sortAsc = !sortAsc;
-  } else {
-    sortField = field;
-    sortAsc = field === "name";
-  }
-  applySort();
-  filtered = [...filtered].sort((a, b) => {
-    const dir = sortAsc ? 1 : -1;
-    if (sortField === "count") return (a.count - b.count) * dir;
-    return a.name.localeCompare(b.name) * dir;
-  });
-  render();
-}
-
-function showDetail(name) {
-  const r = allResources.find(x => x.name === name);
-  if (!r) return;
-
-  document.getElementById("detail-name").textContent = r.name;
-  document.getElementById("detail-sub").textContent = `Used by ${r.count} server${r.count !== 1 ? "s" : ""}`;
-
-  let html = `<table><thead><tr>
-    <th>Server</th><th style="text-align:right;width:100px">Players</th>
-  </tr></thead><tbody>`;
-
-  r.servers.forEach(s => {
-    const link = s.id ? `https://servers.redm.net/servers/detail/${s.id}` : "#";
-    html += `<tr>
-      <td><a class="server-link" href="${link}" target="_blank" rel="noopener">${esc(s.name)}</a></td>
-      <td style="text-align:right">${s.players} / ${s.max_players}</td>
-    </tr>`;
-  });
-
-  html += "</tbody></table>";
-  document.getElementById("detail-servers").innerHTML = html;
-
-  document.getElementById("detail-overlay").classList.add("open");
-}
-
-function closeDetail() {
-  document.getElementById("detail-overlay").classList.remove("open");
-}
-
-function showUpdateInfo(data) {
-  const panel = document.getElementById("update-info");
-  const parsedAt = new Date(data.parsed_at);
-  const total = data.total_servers || 0;
-  const parsed = data.total_servers_with_resources || 0;
-  const pct = total > 0 ? Math.round(parsed / total * 100) : 0;
-
-  // Last update — relative time
-  const ago = relativeTime(parsedAt);
-  document.getElementById("upd-last").textContent = ago;
-
-  // Next run — next 06:00 UTC after parsed_at
-  const next = nextCronRun(parsedAt);
-  const now = new Date();
-  if (next > now) {
-    document.getElementById("upd-next").textContent = relativeTime(next, true);
-  } else {
-    document.getElementById("upd-next").textContent = "soon (scheduled)";
-  }
-
-  // Progress bar
-  document.getElementById("upd-bar").style.width = pct + "%";
-  document.getElementById("upd-progress-text").textContent =
-    `Parsed ${parsed} of ${total} servers`;
-  document.getElementById("upd-pct").textContent = pct + "%";
-
-  panel.style.display = "block";
-}
-
-function nextCronRun(after) {
-  // Cron: 0 6 * * * (daily at 06:00 UTC)
-  const d = new Date(after);
-  d.setUTCHours(6, 0, 0, 0);
-  if (d <= after) d.setUTCDate(d.getUTCDate() + 1);
-  return d;
-}
-
-function relativeTime(date, future) {
-  const now = new Date();
-  const diff = future ? date - now : now - date;
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return future ? "less than a minute" : "just now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} min${min > 1 ? "" : ""} ${future ? "from now" : "ago"}`;
-  const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `${hrs}h ${min % 60}m ${future ? "from now" : "ago"}`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ${hrs % 24}h ${future ? "from now" : "ago"}`;
-}
-
-function esc(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-// Events
-document.getElementById("search").addEventListener("input", doSearch);
-document.getElementById("prev-btn").addEventListener("click", () => { currentPage--; render(); });
-document.getElementById("next-btn").addEventListener("click", () => { currentPage++; render(); });
-document.getElementById("detail-close").addEventListener("click", closeDetail);
-document.getElementById("detail-overlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closeDetail();
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeDetail();
-});
-
-init();
-</script>
 </body>
 </html>

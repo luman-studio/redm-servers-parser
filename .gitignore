@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 data/progress.json
+data/chunks/
+data/results/
 .venv/
 venv/

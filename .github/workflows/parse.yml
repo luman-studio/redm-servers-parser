@@ -10,9 +10,10 @@ permissions:
   contents: write
 
 jobs:
-  parse:
+  # ─── Phase 1: Fetch stream and split into chunks ───────────────────
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6 hours max
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +25,91 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run parser
-        run: python parser.py
+      - name: Fetch stream and split into chunks
+        run: python parser.py prepare -w 8
+
+      - name: Upload chunks
+        uses: actions/upload-artifact@v4
+        with:
+          name: chunks
+          path: data/chunks/
+          retention-days: 1
+
+  # ─── Phase 2: Fetch server details (parallel workers) ──────────────
+  fetch:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        worker: [0, 1, 2, 3, 4, 5, 6, 7]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download chunks
+        uses: actions/download-artifact@v4
+        with:
+          name: chunks
+          path: data/chunks/
+
+      - name: Fetch server details for chunk ${{ matrix.worker }}
+        run: |
+          CHUNK="data/chunks/chunk_${{ matrix.worker }}.json"
+          if [ -f "$CHUNK" ]; then
+            python parser.py fetch -c "$CHUNK" -o "data/results/result_${{ matrix.worker }}.json"
+          else
+            echo "Chunk file not found (fewer servers than workers), skipping."
+            mkdir -p data/results
+            echo "{}" > "data/results/result_${{ matrix.worker }}.json"
+          fi
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.worker }}
+          path: data/results/result_${{ matrix.worker }}.json
+          retention-days: 1
+
+  # ─── Phase 3: Merge results and commit ─────────────────────────────
+  merge:
+    needs: fetch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download chunks (for stream info)
+        uses: actions/download-artifact@v4
+        with:
+          name: chunks
+          path: data/chunks/
+
+      - name: Download all worker results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: data/results/
+          merge-multiple: true
+
+      - name: Merge results
+        run: python parser.py merge
 
       - name: Commit updated data
         run: |
