@@ -11,6 +11,10 @@ document.addEventListener("alpine:init", () => {
     sortAsc: false,
     page: 0,
     hideCommon: true,
+    showCommonSettings: false,
+    commonSearch: "",
+    commonWhitelist: [],
+    commonBlacklist: [],
     detail: null,       // resource detail overlay
     serverDetail: null,  // server detail overlay
 
@@ -22,6 +26,7 @@ document.addEventListener("alpine:init", () => {
 
     // ── Init ──
     async init() {
+      this.loadCommonLists();
       this.readUrlParams();
       try {
         const resp = await fetch("data/resources.json");
@@ -79,11 +84,95 @@ document.addEventListener("alpine:init", () => {
 
     toggleHideCommon() { this.hideCommon = !this.hideCommon; this.page = 0; },
 
+    // ── Common lists (localStorage) ──
+    loadCommonLists() {
+      try {
+        this.commonWhitelist = JSON.parse(localStorage.getItem("redm_common_whitelist") || "[]");
+        this.commonBlacklist = JSON.parse(localStorage.getItem("redm_common_blacklist") || "[]");
+      } catch { this.commonWhitelist = []; this.commonBlacklist = []; }
+    },
+
+    saveCommonLists() {
+      localStorage.setItem("redm_common_whitelist", JSON.stringify(this.commonWhitelist));
+      localStorage.setItem("redm_common_blacklist", JSON.stringify(this.commonBlacklist));
+    },
+
+    isCommon(name) {
+      if (this.commonBlacklist.includes(name)) return true;
+      if (this.commonWhitelist.includes(name)) return false;
+      const count = this.raw?.resources?.[name]?.count ?? 0;
+      return count > this.commonThreshold;
+    },
+
+    whitelistAdd(name) {
+      if (!this.commonWhitelist.includes(name)) this.commonWhitelist.push(name);
+      this.commonBlacklist = this.commonBlacklist.filter(n => n !== name);
+      this.saveCommonLists();
+    },
+
+    whitelistRemove(name) {
+      this.commonWhitelist = this.commonWhitelist.filter(n => n !== name);
+      this.saveCommonLists();
+    },
+
+    blacklistAdd(name) {
+      if (!this.commonBlacklist.includes(name)) this.commonBlacklist.push(name);
+      this.commonWhitelist = this.commonWhitelist.filter(n => n !== name);
+      this.saveCommonLists();
+    },
+
+    blacklistRemove(name) {
+      this.commonBlacklist = this.commonBlacklist.filter(n => n !== name);
+      this.saveCommonLists();
+    },
+
+    // ── Common settings panel data ──
+    get autoHiddenList() {
+      const q = this.commonSearch.toLowerCase().trim();
+      return this.allResources
+        .filter(r => r.count > this.commonThreshold && !this.commonWhitelist.includes(r.name))
+        .filter(r => !q || r.name.toLowerCase().includes(q))
+        .sort((a, b) => b.count - a.count);
+    },
+
+    get whitelistedList() {
+      const q = this.commonSearch.toLowerCase().trim();
+      return this.commonWhitelist
+        .map(name => ({ name, count: this.raw?.resources?.[name]?.count ?? 0 }))
+        .filter(r => !q || r.name.toLowerCase().includes(q));
+    },
+
+    get blacklistedList() {
+      const q = this.commonSearch.toLowerCase().trim();
+      return this.commonBlacklist
+        .map(name => ({ name, count: this.raw?.resources?.[name]?.count ?? 0 }))
+        .filter(r => !q || r.name.toLowerCase().includes(q));
+    },
+
+    blacklistInput: "",
+
+    addToBlacklist() {
+      const name = this.blacklistInput.trim();
+      if (name && this.raw?.resources?.[name]) {
+        this.blacklistAdd(name);
+        this.blacklistInput = "";
+      }
+    },
+
+    get blacklistSuggestions() {
+      const q = this.blacklistInput.toLowerCase().trim();
+      if (!q || q.length < 2) return [];
+      return this.allResources
+        .filter(r => r.name.toLowerCase().includes(q) && !this.commonBlacklist.includes(r.name) && !this.isCommon(r.name))
+        .slice(0, 8)
+        .map(r => r.name);
+    },
+
     // ── Filtered + sorted resources ──
     get filtered() {
       const q = this.query.toLowerCase().trim();
       let list = this.tab === "servers" ? [] : this.allResources;
-      if (this.hideCommon && this.tab === "resources") list = list.filter(r => r.count <= this.commonThreshold);
+      if (this.hideCommon && this.tab === "resources") list = list.filter(r => !this.isCommon(r.name));
       if (q && this.tab === "resources") list = list.filter(r => r.name.toLowerCase().includes(q));
       const dir = this.sortAsc ? 1 : -1;
       return [...list].sort((a, b) => {
@@ -138,6 +227,7 @@ document.addEventListener("alpine:init", () => {
         }
       }
       return Object.entries(counts)
+        .filter(([n]) => !this.hideCommon || !this.isCommon(n))
         .map(([n, c]) => ({ name: n, count: c, pct: Math.round(c / r.count * 100) }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 30);
@@ -176,7 +266,7 @@ document.addEventListener("alpine:init", () => {
 
     // ── Charts data ──
     get nonCommonResources() {
-      return this.hideCommon ? this.allResources.filter(r => r.count <= this.commonThreshold) : this.allResources;
+      return this.hideCommon ? this.allResources.filter(r => !this.isCommon(r.name)) : this.allResources;
     },
 
     get topResources() {

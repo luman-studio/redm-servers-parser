@@ -81,8 +81,13 @@
               : `${fmt(filtered.length)} resources`
             "></span>
             <template x-if="tab === 'resources'">
-              <button class="btn-small" :class="{ 'btn-active': hideCommon }" @click="toggleHideCommon"
-                x-text="hideCommon ? `Common hidden (>${commonThreshold})` : 'Hide common'"></button>
+              <div style="display:flex;gap:4px">
+                <button class="btn-small" :class="{ 'btn-active': hideCommon }" @click="toggleHideCommon"
+                  x-text="hideCommon ? `Common hidden (>${commonThreshold})` : 'Hide common'"></button>
+                <button class="btn-small btn-icon" @click="showCommonSettings = true" title="Configure hidden resources">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+              </div>
             </template>
             <button class="btn-small" @click="exportCsv">Export CSV</button>
           </div>
@@ -157,8 +162,13 @@
         <div>
           <div class="toolbar" style="margin-bottom:16px">
             <span></span>
-            <button class="btn-small" :class="{ 'btn-active': hideCommon }" @click="toggleHideCommon"
-              x-text="hideCommon ? `Common hidden (>${commonThreshold})` : 'Hide common'"></button>
+            <div style="display:flex;gap:4px">
+              <button class="btn-small" :class="{ 'btn-active': hideCommon }" @click="toggleHideCommon"
+                x-text="hideCommon ? `Common hidden (>${commonThreshold})` : 'Hide common'"></button>
+              <button class="btn-small btn-icon" @click="showCommonSettings = true" title="Configure hidden resources">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              </button>
+            </div>
           </div>
 
           <!-- Top resources bar chart -->
@@ -273,6 +283,81 @@
                   </template>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ═══════════ COMMON SETTINGS OVERLAY ═══════════ -->
+      <template x-if="showCommonSettings">
+        <div class="overlay" @click.self="showCommonSettings = false" @keydown.escape.window="showCommonSettings = false">
+          <div class="panel" style="max-width:600px">
+            <button class="close-btn" @click="showCommonSettings = false">&times;</button>
+            <h2>Hidden Resources</h2>
+            <div class="sub">Manage which resources are hidden when "Hide common" is active</div>
+
+            <!-- Search -->
+            <div class="search-box" style="margin:12px 0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" x-model="commonSearch" placeholder="Filter list..." autocomplete="off">
+            </div>
+
+            <!-- Add to blacklist -->
+            <div class="cs-add">
+              <div style="position:relative;flex:1">
+                <input type="text" x-model="blacklistInput" placeholder="Add resource to hidden list..." autocomplete="off"
+                  @keydown.enter="addToBlacklist()">
+                <template x-if="blacklistSuggestions.length > 0">
+                  <div class="cs-suggestions">
+                    <template x-for="s in blacklistSuggestions" :key="s">
+                      <div class="cs-suggestion" @click="blacklistAdd(s); blacklistInput = ''" x-text="s"></div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+              <button class="btn-small" @click="addToBlacklist()">Add</button>
+            </div>
+
+            <div class="scroll-list" style="max-height:50vh">
+              <!-- Custom hidden (blacklist) -->
+              <template x-if="blacklistedList.length > 0">
+                <div class="cs-section">
+                  <div class="cs-title">Custom hidden</div>
+                  <template x-for="r in blacklistedList" :key="r.name">
+                    <div class="cs-row">
+                      <span class="mono" x-text="r.name"></span>
+                      <span class="dim" x-text="r.count + ' servers'"></span>
+                      <button class="btn-small" @click="blacklistRemove(r.name)">Remove</button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Whitelisted (overrides) -->
+              <template x-if="whitelistedList.length > 0">
+                <div class="cs-section">
+                  <div class="cs-title">Whitelisted (shown despite threshold)</div>
+                  <template x-for="r in whitelistedList" :key="r.name">
+                    <div class="cs-row">
+                      <span class="mono" x-text="r.name"></span>
+                      <span class="dim" x-text="r.count + ' servers'"></span>
+                      <button class="btn-small" @click="whitelistRemove(r.name)">Hide</button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Auto-hidden -->
+              <div class="cs-section">
+                <div class="cs-title" x-text="`Auto-hidden (>${commonThreshold} servers) — ${autoHiddenList.length} resources`"></div>
+                <template x-for="r in autoHiddenList" :key="r.name">
+                  <div class="cs-row">
+                    <span class="mono" x-text="r.name"></span>
+                    <span class="dim" x-text="r.count + ' servers'"></span>
+                    <button class="btn-small" @click="whitelistAdd(r.name)">Show</button>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
         </div>

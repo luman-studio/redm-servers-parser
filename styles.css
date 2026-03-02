@@ -164,6 +164,36 @@ a.link:hover { text-decoration: underline; }
 .corr-item:hover { background: var(--accent); color: #fff; }
 .corr-pct { color: var(--green); margin-left: 4px; font-family: -apple-system, sans-serif; }
 
+/* ── Common settings panel ── */
+.btn-icon { padding: 5px 7px; display: flex; align-items: center; }
+.cs-add { display: flex; gap: 6px; margin-bottom: 14px; }
+.cs-add input {
+  width: 100%; padding: 7px 10px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-size: 13px; outline: none;
+  font-family: 'Consolas','Monaco',monospace;
+}
+.cs-add input:focus { border-color: var(--accent); }
+.cs-suggestions {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  margin-top: 2px; overflow: hidden;
+}
+.cs-suggestion {
+  padding: 6px 10px; font-size: 12px; cursor: pointer;
+  font-family: 'Consolas','Monaco',monospace;
+}
+.cs-suggestion:hover { background: var(--accent); color: #fff; }
+.cs-section { margin-bottom: 14px; }
+.cs-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.cs-row {
+  display: flex; align-items: center; gap: 10px; padding: 5px 0;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.cs-row .mono { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-row .dim { font-size: 11px; white-space: nowrap; }
+.cs-row .btn-small { padding: 2px 8px; font-size: 11px; flex-shrink: 0; }
+
 /* ── Loading / Error ── */
 .loading { text-align: center; padding: 60px 20px; color: var(--text-dim); }
 .spinner {
