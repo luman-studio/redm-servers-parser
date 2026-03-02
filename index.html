@@ -80,6 +80,10 @@
               ? `${fmt(filteredServers.length)} servers`
               : `${fmt(filtered.length)} resources`
             "></span>
+            <template x-if="tab === 'resources'">
+              <button class="btn-small" :class="{ 'btn-active': hideCommon }" @click="toggleHideCommon"
+                x-text="hideCommon ? `Common hidden (>${commonThreshold})` : 'Hide common'"></button>
+            </template>
             <button class="btn-small" @click="exportCsv">Export CSV</button>
           </div>
         </div>
@@ -151,6 +155,11 @@
       <!-- ═══════════ ANALYTICS TAB ═══════════ -->
       <template x-if="tab === 'analytics'">
         <div>
+          <div class="toolbar" style="margin-bottom:16px">
+            <span></span>
+            <button class="btn-small" :class="{ 'btn-active': hideCommon }" @click="toggleHideCommon"
+              x-text="hideCommon ? `Common hidden (>${commonThreshold})` : 'Hide common'"></button>
+          </div>
 
           <!-- Top resources bar chart -->
           <div class="chart-section">
@@ -184,9 +193,9 @@
           <div class="chart-section">
             <div class="chart-title">Resource Categories (by prefix)</div>
             <div class="tag-cloud">
-              <template x-for="c in categories" :key="c.name">
-                <span class="tag" @click="filterByCategory(c.name)">
-                  <span x-text="c.name + '_*'"></span>
+              <template x-for="c in categories" :key="c.prefix">
+                <span class="tag" @click="filterByCategory(c.prefix)">
+                  <span x-text="c.prefix + '*'"></span>
                   <span class="tag-count" x-text="c.resources"></span>
                 </span>
               </template>

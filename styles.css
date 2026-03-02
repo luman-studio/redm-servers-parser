@@ -77,6 +77,8 @@ header h1 span { color: var(--accent); }
   cursor: pointer; font-size: 12px; transition: all .15s;
 }
 .btn-small:hover { border-color: var(--accent); color: var(--text); }
+.btn-small.btn-active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-small.btn-active:hover { background: var(--accent-hover); }
 
 /* ── Table ── */
 table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }

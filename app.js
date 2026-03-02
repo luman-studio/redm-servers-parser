@@ -10,6 +10,7 @@ document.addEventListener("alpine:init", () => {
     sortField: "count",
     sortAsc: false,
     page: 0,
+    hideCommon: true,
     detail: null,       // resource detail overlay
     serverDetail: null,  // server detail overlay
 
@@ -71,10 +72,18 @@ document.addEventListener("alpine:init", () => {
 
     get lastUpdateText() { return this.parsedAt ? relativeTime(this.parsedAt) : "—"; },
 
+    // ── Common threshold ──
+    get commonThreshold() {
+      return Math.max(1, Math.floor(this.parsedServers * 0.5));
+    },
+
+    toggleHideCommon() { this.hideCommon = !this.hideCommon; this.page = 0; },
+
     // ── Filtered + sorted resources ──
     get filtered() {
       const q = this.query.toLowerCase().trim();
       let list = this.tab === "servers" ? [] : this.allResources;
+      if (this.hideCommon && this.tab === "resources") list = list.filter(r => r.count <= this.commonThreshold);
       if (q && this.tab === "resources") list = list.filter(r => r.name.toLowerCase().includes(q));
       const dir = this.sortAsc ? 1 : -1;
       return [...list].sort((a, b) => {
@@ -145,29 +154,33 @@ document.addEventListener("alpine:init", () => {
     buildCategories() {
       const prefixCounts = {};
       for (const r of this.allResources) {
-        const parts = r.name.split(/[_-]/);
-        if (parts.length < 2 || parts[0].length < 2) continue;
-        const prefix = parts[0].toLowerCase();
-        if (!prefixCounts[prefix]) prefixCounts[prefix] = { count: 0, resources: 0 };
+        const m = r.name.match(/^([a-zA-Z]{2,})[_-]/);
+        if (!m) continue;
+        const prefix = m[0].toLowerCase();
+        if (!prefixCounts[prefix]) prefixCounts[prefix] = { resources: 0 };
         prefixCounts[prefix].resources++;
       }
       this.categories = Object.entries(prefixCounts)
         .filter(([, v]) => v.resources >= 3)
-        .map(([name, v]) => ({ name, resources: v.resources }))
+        .map(([prefix, v]) => ({ prefix, resources: v.resources }))
         .sort((a, b) => b.resources - a.resources)
         .slice(0, 40);
     },
 
     filterByCategory(prefix) {
       this.tab = "resources";
-      this.query = prefix + "_";
+      this.query = prefix;
       this.page = 0;
       this.syncUrl();
     },
 
     // ── Charts data ──
+    get nonCommonResources() {
+      return this.hideCommon ? this.allResources.filter(r => r.count <= this.commonThreshold) : this.allResources;
+    },
+
     get topResources() {
-      return [...this.allResources].sort((a, b) => b.count - a.count).slice(0, 15);
+      return [...this.nonCommonResources].sort((a, b) => b.count - a.count).slice(0, 15);
     },
 
     get maxCount() {
@@ -184,7 +197,7 @@ document.addEventListener("alpine:init", () => {
         { label: "51+", min: 51, max: Infinity },
       ];
       const counts = buckets.map(() => 0);
-      for (const r of this.allResources) {
+      for (const r of this.nonCommonResources) {
         for (let i = 0; i < buckets.length; i++) {
           if (r.count >= buckets[i].min && r.count <= buckets[i].max) { counts[i]++; break; }
         }
