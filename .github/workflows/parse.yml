@@ -6,6 +6,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: parse-master
+  cancel-in-progress: false
+
 jobs:
   # ─── Phase 1: Fetch stream and split into chunks ───────────────────
   prepare:
@@ -44,7 +48,7 @@ jobs:
   fetch:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       matrix:
         worker: ${{ fromJson(needs.prepare.outputs.matrix) }}
@@ -113,5 +117,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/resources.json
-          git diff --cached --quiet || git commit -m "Update resource data $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Update resource data $(date -u +'%Y-%m-%d %H:%M UTC')"
+          # Rebase-then-push with retry: defends against a concurrent commit
+          # landing between our checkout and push. -X theirs keeps our newly
+          # regenerated resources.json on conflict (both sides produce the
+          # same kind of artifact; ours is fresher).
+          for attempt in 1 2 3 4 5; do
+            git fetch origin master
+            if git rebase -X theirs origin/master && git push; then
+              echo "Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            echo "Push attempt $attempt failed, retrying in $((attempt * 5))s..."
+            sleep $((attempt * 5))
+          done
+          echo "Push failed after 5 attempts"
+          exit 1

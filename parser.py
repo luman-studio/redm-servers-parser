@@ -51,6 +51,7 @@ HEADERS = {
 
 BATCH_SIZE = 75       # requests per batch (close to ~80 limit, safe with separate IPs)
 BATCH_COOLDOWN = 300  # seconds (5 min) between batches
+RATE_LIMIT_RETRIES = 3  # how many cooldown-and-retry passes before skipping a rate-limited endpoint
 
 
 # ─── Protobuf decoder (minimal) ─────────────────────────────────────────
@@ -490,17 +491,30 @@ def cmd_fetch(chunk_file: str, output_file: str):
         print(f"\n  Batch {batch_num}/{total_batches}: fetching {len(batch)} servers...", flush=True)
         batch_ok = 0
         batch_err = 0
-        hit_rate_limit = False
+        rate_limit_hits = 0
 
-        for i, srv in enumerate(batch):
+        i = 0
+        retries_on_current = 0
+        while i < len(batch):
+            srv = batch[i]
             ep = srv["endpoint"]
             detail, reason = fetch_single_server(ep)
 
             if reason == "rate_limit":
-                hit_rate_limit = True
-                batch_err += 1
-                print(f"    [{i+1}/{len(batch)}] {ep} -> RATE LIMITED, stopping batch", flush=True)
-                break
+                rate_limit_hits += 1
+                if retries_on_current >= RATE_LIMIT_RETRIES:
+                    print(f"    [{i+1}/{len(batch)}] {ep} -> rate_limit, giving up after {RATE_LIMIT_RETRIES} cooldowns", flush=True)
+                    batch_err += 1
+                    retries_on_current = 0
+                    i += 1
+                    continue
+                retries_on_current += 1
+                print(f"    [{i+1}/{len(batch)}] {ep} -> RATE LIMITED, cooldown {BATCH_COOLDOWN}s ({retries_on_current}/{RATE_LIMIT_RETRIES})", flush=True)
+                time.sleep(BATCH_COOLDOWN)
+                wait_for_unblock()
+                continue  # retry same endpoint
+
+            retries_on_current = 0
 
             if detail:
                 server_details[ep] = detail
@@ -511,8 +525,15 @@ def cmd_fetch(chunk_file: str, output_file: str):
                 status = reason or "error"
 
             print(f"    [{i+1}/{len(batch)}] {ep} -> {status} (ok={batch_ok} err={batch_err})", flush=True)
+            i += 1
 
-        print(f"  Batch {batch_num} done: ok={batch_ok} err={batch_err}" + (" (rate limited)" if hit_rate_limit else ""), flush=True)
+            # Save partial results periodically so a timeout doesn't waste the worker's progress
+            if (i % 25) == 0:
+                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(server_details, f, ensure_ascii=False)
+
+        print(f"  Batch {batch_num} done: ok={batch_ok} err={batch_err}" + (f" (rate-limited {rate_limit_hits}x)" if rate_limit_hits else ""), flush=True)
 
     # Save results
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
